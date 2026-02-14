@@ -38,6 +38,7 @@
                   </select>
                 </div>
                 <button type="submit" class="btn btn-primary btn-accent w-100">Login</button>
+                <p class="small text-muted mt-3 mb-0">Admin demo: <code>admin@foodcourt.com</code> / <code>admin123</code></p>
               </form>
             </div>
             <div class="tab-pane fade" id="registerTab">
@@ -76,30 +77,45 @@
   <script src="js/script.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', function() {
-      if (window.getCurrentUser()) {
-        window.location.href = 'index.html';
+      var user = window.getCurrentUser();
+      if (user) {
+        window.location.href = (user.role === 'admin') ? 'admin.html' : 'index.html';
         return;
       }
       document.getElementById('loginForm').onsubmit = function(e) {
         e.preventDefault();
-        var email = document.getElementById('loginEmail').value;
-        var password = document.getElementById('loginPassword').value;
-        var role = document.getElementById('loginRole').value;
+        var email = document.getElementById('loginEmail').value.trim();
+        var password = document.getElementById('loginPassword').value.trim();
+        var role = (document.getElementById('loginRole').value || '').trim().toLowerCase();
+        // Admin: either select "Admin" in dropdown OR use admin credentials
+        var isAdminCreds = (email.toLowerCase() === 'admin@foodcourt.com' && password === 'admin123');
+        if (isAdminCreds || role === 'admin') {
+          role = 'admin';
+        }
         localStorage.setItem('foodcourt_token', 'demo-token');
         localStorage.setItem('foodcourt_user', JSON.stringify({ email: email, name: email.split('@')[0], role: role }));
-        window.renderNavbar();
-        window.location.href = 'index.html';
+        if (typeof window.renderNavbar === 'function') window.renderNavbar();
+        // User → index.html (user dashboard). Admin → admin.html (admin panel).
+        if (role === 'admin') {
+          window.location.replace('admin.html');
+        } else {
+          window.location.replace('index.html');
+        }
       };
       document.getElementById('registerForm').onsubmit = function(e) {
         e.preventDefault();
-        var name = document.getElementById('regName').value;
-        var email = document.getElementById('regEmail').value;
+        var name = document.getElementById('regName').value.trim();
+        var email = document.getElementById('regEmail').value.trim();
         var password = document.getElementById('regPassword').value;
-        var role = document.getElementById('regRole').value;
+        var role = (document.getElementById('regRole').value || '').trim().toLowerCase();
         localStorage.setItem('foodcourt_token', 'demo-token');
         localStorage.setItem('foodcourt_user', JSON.stringify({ email: email, name: name, role: role }));
-        window.renderNavbar();
-        window.location.href = 'index.html';
+        if (typeof window.renderNavbar === 'function') window.renderNavbar();
+        if (role === 'admin') {
+          window.location.replace('admin.html');
+        } else {
+          window.location.replace('index.html');
+        }
       };
     });
   </script>

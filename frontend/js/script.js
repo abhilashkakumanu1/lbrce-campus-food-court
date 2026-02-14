@@ -55,7 +55,7 @@ function isLoggedIn() {
 
 function isAdmin() {
   const user = getCurrentUser();
-  return user && user.role === 'admin';
+  return user && (user.role === 'admin' || user.role === 'Admin');
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
