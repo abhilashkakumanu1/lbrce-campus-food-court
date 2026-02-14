@@ -1,54 +1,39 @@
-"""
-User Routes
-===========
-Blueprint: users_bp
-Prefix: /api/users
+from flask import Blueprint, request, jsonify
+from api.middleware.auth_middleware import require_auth
+from api.services.supabase_service import supabase_service
 
-Endpoints:
-    GET  /users/profile  — Get current user's profile
-    PUT  /users/profile  — Update current user's profile
-
-Both endpoints require Authorization header (JWT).
-"""
-
-# from flask import Blueprint, request, jsonify
-# from services.supabase_service import get_supabase_client
-# from middleware.auth_middleware import require_auth
-
-# users_bp = Blueprint("users", __name__)
+bp = Blueprint('users', __name__, url_prefix='/users')
 
 
-def get_profile():
-    """
-    GET /users/profile
-    Headers: Authorization: Bearer <token>
+@bp.route('/profile', methods=['GET', 'PUT'])
+@require_auth
+def profile():
+    user_id = request.user_id
+    client = supabase_service.get_client()
 
-    Steps:
-    1. Extract user_id from the verified JWT (set by auth middleware)
-    2. Query the `users` table: SELECT * FROM users WHERE id = user_id
-    3. If user not found, return 404
-    4. Return user profile data (id, name, email, phone, telegram_id, role)
-    """
-    pass
+    if request.method == 'GET':
+        res = (
+            client.table('users')
+            .select('*')
+            .eq('id', user_id)
+            .single()
+            .execute()
+        )
+        user = res.data
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        return jsonify({'user': user})
 
-
-def update_profile():
-    """
-    PUT /users/profile
-    Headers: Authorization: Bearer <token>
-
-    Request Body (all fields optional):
-        {
-            "name": "Ramesh K",
-            "phone": "9876543210",
-            "telegram_id": "123456789"
-        }
-
-    Steps:
-    1. Extract user_id from the verified JWT
-    2. Parse JSON body — get name, phone, telegram_id (all optional)
-    3. Build update dict with only provided fields
-    4. Update the `users` table: UPDATE users SET ... WHERE id = user_id
-    5. Return updated user profile with 200 status
-    """
-    pass
+    # PUT update
+    body = request.get_json(silent=True) or {}
+    update_data = {k: v for k, v in body.items() if k in ['name', 'phone', 'telegram_id']}
+    if not update_data:
+        return jsonify({'error': 'No valid fields provided'}), 400
+    res = (
+        client.table('users')
+        .update(update_data)
+        .eq('id', user_id)
+        .single()
+        .execute()
+    )
+    return jsonify({'user': res.data})

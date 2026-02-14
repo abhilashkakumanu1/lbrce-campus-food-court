@@ -1,107 +1,85 @@
-"""
-Telegram Notification Service
-=============================
-Sends Telegram messages when order status changes.
+import os
+import requests
+import logging
+from api.config import Config
+from api.services.supabase_service import get_supabase_client
 
-This is NOT a separate bot service. It's just HTTP calls to the
-Telegram Bot API using the `requests` library.
-
-No `python-telegram-bot` library needed.
-"""
-
-# import requests
-# from config import Config
-
-# TELEGRAM_API_URL = f"https://api.telegram.org/bot{Config.TELEGRAM_BOT_TOKEN}/sendMessage"
+TELEGRAM_API_URL = "https://api.telegram.org/bot{token}/{method}"
 
 
 def send_telegram_message(chat_id, message):
-    """
-    Send a message to a Telegram user.
-
-    Args:
-        chat_id (int): The user's Telegram chat ID (stored in users.telegram_id)
-        message (str): The message text to send
-
-    Steps:
-    1. Build the Telegram API URL: https://api.telegram.org/bot<TOKEN>/sendMessage
-    2. Send POST request with JSON body: { "chat_id": chat_id, "text": message }
-    3. Check response status — log error if it fails
-    4. Don't raise exceptions — notification failure should NOT break the order flow
-
-    Note: If chat_id is None, skip sending (user hasn't linked Telegram).
-    """
-    pass
+    """Send a message to a Telegram chat id without raising errors."""
+    if not chat_id:
+        return
+    url = TELEGRAM_API_URL.format(token=Config.TELEGRAM_TOKEN, method="sendMessage")
+    payload = {"chat_id": chat_id, "text": message}
+    try:
+        resp = requests.post(url, json=payload, timeout=5)
+        if not resp.ok:
+            logging.error("Telegram API error %s: %s", resp.status_code, resp.text)
+    except Exception as exc:
+        logging.error("Failed to send telegram message: %s", exc)
 
 
-def notify_admin_new_order(order_id, user_name, stall_name, total_amount):
-    """
-    Notify admin(s) when a new order is placed.
+# legacy helpers
+def notify_admin_new_order(order_id, user_id, stall_id, total_amount):
+    """Legacy helper; sends to single admin chat from env var."""
+    chat_id = os.environ.get("TELEGRAM_ADMIN_CHAT")
+    if not chat_id:
+        return
+    text = (
+        f"New order {order_id} from user {user_id} at stall {stall_id}: "
+        f"₹{total_amount:.2f}"
+    )
+    send_telegram_message(chat_id, text)
 
-    Args:
-        order_id (int): The new order ID
-        user_name (str): Name of the student who placed the order
-        stall_name (str): Name of the food stall
-        total_amount (float): Total order amount in rupees
 
-    Steps:
-    1. Query users table for all users with role = 'admin' and telegram_id IS NOT NULL
-    2. Build message: "New order #{order_id} from {user_name} - {stall_name} - ₹{total_amount}"
-    3. For each admin with a telegram_id, call send_telegram_message(admin.telegram_id, message)
-
-    Note: If no admins have linked Telegram, this is a no-op (no error).
-    """
-    pass
+def notify_admins_new_order(order_id, user_name, stall_name, total_amount):
+    """Notify all admins with telegram_id about a new order."""
+    client = get_supabase_client()
+    res = (
+        client.table('users')
+        .select('telegram_id')
+        .eq('role', 'admin')
+        .not_('telegram_id', None)
+        .execute()
+    )
+    admins = res.data or []
+    message = (
+        f"New order #{order_id} from {user_name} - {stall_name} - ₹{total_amount:.2f}"
+    )
+    for admin in admins:
+        send_telegram_message(admin.get('telegram_id'), message)
 
 
 def notify_order_approved(user_telegram_id, order_id, estimated_time=None):
-    """
-    Notify student when their order is approved.
-
-    Args:
-        user_telegram_id (int): Student's Telegram chat ID
-        order_id (int): The order ID
-        estimated_time (int, optional): Minutes until order is ready
-
-    Steps:
-    1. If user_telegram_id is None, return (user hasn't linked Telegram)
-    2. Build message:
-       - With time: "Your order #{order_id} has been approved! It will be ready in {estimated_time} minutes."
-       - Without time: "Your order #{order_id} has been approved!"
-    3. Call send_telegram_message(user_telegram_id, message)
-    """
-    pass
+    if not user_telegram_id:
+        return
+    msg = f"Your order #{order_id} has been approved!"
+    if estimated_time is not None:
+        msg += f" It will be ready in {estimated_time} minutes."
+    send_telegram_message(user_telegram_id, msg)
 
 
 def notify_order_ready(user_telegram_id, order_id, stall_name):
-    """
-    Notify student when their order is ready for pickup.
-
-    Args:
-        user_telegram_id (int): Student's Telegram chat ID
-        order_id (int): The order ID
-        stall_name (str): Name of the food stall for pickup
-
-    Steps:
-    1. If user_telegram_id is None, return
-    2. Build message: "Your order #{order_id} is ready for pickup at {stall_name}!"
-    3. Call send_telegram_message(user_telegram_id, message)
-    """
-    pass
+    if not user_telegram_id:
+        return
+    msg = f"Your order #{order_id} is ready for pickup at {stall_name}!"
+    send_telegram_message(user_telegram_id, msg)
 
 
 def notify_order_rejected(user_telegram_id, order_id, reason):
-    """
-    Notify student when their order is rejected.
+    if not user_telegram_id:
+        return
+    msg = f"Your order #{order_id} was rejected. Reason: {reason}"
+    send_telegram_message(user_telegram_id, msg)
 
-    Args:
-        user_telegram_id (int): Student's Telegram chat ID
-        order_id (int): The order ID
-        reason (str): Rejection reason from admin
 
-    Steps:
-    1. If user_telegram_id is None, return
-    2. Build message: "Your order #{order_id} was rejected. Reason: {reason}"
-    3. Call send_telegram_message(user_telegram_id, message)
+# ✅ New top-level function to fix ImportError
+def send_order_notification_to_student(user_telegram_id, order_id, stall_name):
     """
-    pass
+    This is the function expected by admin.py.
+    Sends a notification that the order is ready.
+    """
+    notify_order_ready(user_telegram_id, order_id, stall_name)
+

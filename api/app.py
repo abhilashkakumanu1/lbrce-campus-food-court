@@ -1,56 +1,26 @@
-"""
-Main Flask Application
-======================
-Entry point for the Campus Food Court API.
+from flask import Flask
+# import blueprints from the api.routes package
+from api.routes import auth, users, menu, orders, admin
 
-This file:
-1. Creates the Flask app instance
-2. Loads configuration from config.py
-3. Enables CORS for frontend (GitHub Pages) requests
-4. Registers all route blueprints (auth, users, menu, orders, admin)
-5. Defines a health-check route at GET /
-6. Runs the app on the configured port
-"""
-
-# ──────────────────────────────────────────────
-# Imports
-# ──────────────────────────────────────────────
-# from flask import Flask, jsonify
-# from flask_cors import CORS
-# from config import Config
-# from routes.auth import auth_bp
-# from routes.users import users_bp
-# from routes.menu import menu_bp
-# from routes.orders import orders_bp
-# from routes.admin import admin_bp
+# config imports will be resolved when using fully qualified path
 
 
-def create_app():
-    """
-    Application factory.
+def create_app(config_object="api.config.Config"):
+    """Application factory for the Flask app."""
+    app = Flask(__name__)
+    app.config.from_object(config_object)
 
-    Steps:
-    1. Create Flask instance
-    2. Load config from Config class
-    3. Enable CORS — allow requests from GitHub Pages domain and localhost
-       - CORS(app, resources={r"/api/*": {"origins": ["http://localhost:*", "https://<user>.github.io"]}})
-    4. Register blueprints with /api prefix:
-       - auth_bp   → /api/auth
-       - users_bp  → /api/users
-       - menu_bp   → /api/menu
-       - orders_bp → /api/orders
-       - admin_bp  → /api/admin
-    5. Define GET / route that returns {"status": "ok", "message": "LBRCE Food Court API"}
-    6. Return app instance
-    """
-    pass
+    # register blueprints
+    app.register_blueprint(auth.bp)
+    app.register_blueprint(users.bp)
+    app.register_blueprint(menu.bp)
+    app.register_blueprint(orders.bp)
+    app.register_blueprint(admin.bp)
+
+    return app
 
 
-# ──────────────────────────────────────────────
-# Entry point
-# ──────────────────────────────────────────────
-# if __name__ == "__main__":
-#     app = create_app()
-#     port = app.config.get("FLASK_PORT", 5000)
-#     debug = app.config.get("FLASK_ENV") == "development"
-#     app.run(host="0.0.0.0", port=port, debug=debug)
+if __name__ == '__main__':
+    # simple runner for development
+    app = create_app()
+    app.run(host='0.0.0.0', port=5000, debug=True)

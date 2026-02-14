@@ -8,90 +8,156 @@ Routes parse requests and return responses; this module
 handles the database operations and calculations.
 """
 
-# from services.supabase_service import get_supabase_client
-# from services.telegram import notify_admin_new_order
+from api.services.supabase_service import supabase_service
+from api.services.telegram import notify_admin_new_order
+
 
 
 def create_new_order(user_id, stall_id, items):
+    """Create and persist a new order.
+
+    See function docstring in conversation for full description.
     """
-    Create a new order with all its items.
+    client = supabase_service.get_client()
 
-    Args:
-        user_id (str): UUID of the user placing the order
-        stall_id (int): ID of the food stall
-        items (list): List of dicts: [{"menu_item_id": int, "quantity": int}, ...]
+    # fetch menu items for all ids
+    ids = [i["menu_item_id"] for i in items]
+    res = (
+        client.table("menu_items")
+        .select("id,stall_id,price,is_available")
+        .in_("id", ids)
+        .execute()
+    )
+    menu_items = res.data or []
 
-    Steps:
-    1. Get Supabase client
-    2. Fetch menu items from database for all menu_item_ids in the items list
-    3. Validate:
-       a. All menu_item_ids exist
-       b. All items belong to the specified stall_id
-       c. All items are available (is_available = true)
-    4. Calculate total_amount:
-       total = sum(item_price * quantity for each item)
-    5. Insert into orders table:
-       { user_id, stall_id, total_amount, status: 'pending' }
-    6. Get the new order_id from the insert response
-    7. For each item, insert into order_items table:
-       { order_id, menu_item_id, quantity, price_at_order: item_price }
-    8. Call notify_admin_new_order(order_id, user_id, stall_id, total_amount)
-    9. Return order details dict
+    # validations
+    if len(menu_items) != len(ids):
+        raise ValueError("One or more menu items do not exist")
 
-    Returns:
-        dict: { "order_id": int, "total_amount": float, "status": "pending", "created_at": str }
+    # map id -> item record for easy lookup
+    item_map = {mi["id"]: mi for mi in menu_items}
 
-    Raises:
-        ValueError: If validation fails (invalid item, unavailable, wrong stall)
-    """
-    pass
+    total_amount = 0.0
+    for entry in items:
+        mid = entry["menu_item_id"]
+        qty = entry.get("quantity", 0)
+        if mid not in item_map:
+            raise ValueError(f"Menu item {mid} not found")
+        mi = item_map[mid]
+        if mi.get("stall_id") != stall_id:
+            raise ValueError("Item does not belong to the specified stall")
+        if not mi.get("is_available"):
+            raise ValueError(f"Item {mid} is not available")
+        total_amount += mi.get("price", 0) * qty
+
+    # insert order
+    order_payload = {
+        "user_id": user_id,
+        "stall_id": stall_id,
+        "total_amount": total_amount,
+        "status": "pending",
+    }
+    insert_res = client.table("orders").insert(order_payload).execute()
+    if not insert_res.data:
+        raise RuntimeError("Failed to create order")
+    order_rec = insert_res.data[0]
+    order_id = order_rec.get("id")
+
+    # insert order items
+    order_items_payload = []
+    for entry in items:
+        mid = entry["menu_item_id"]
+        qty = entry.get("quantity", 0)
+        mi = item_map[mid]
+        order_items_payload.append(
+            {
+                "order_id": order_id,
+                "menu_item_id": mid,
+                "quantity": qty,
+                "price_at_order": mi.get("price", 0),
+            }
+        )
+    client.table("order_items").insert(order_items_payload).execute()
+
+    # notify admins
+    try:
+        notify_admin_new_order(order_id, user_id, stall_id, total_amount)
+    except Exception:
+        # do not fail the request if notification fails
+        pass
+
+    return {
+        "order_id": order_id,
+        "total_amount": total_amount,
+        "status": "pending",
+        "created_at": order_rec.get("created_at"),
+    }
+
 
 
 def get_user_orders(user_id, status_filter=None):
-    """
-    Get all orders for a specific user.
+    client = supabase_service.get_client()
+    query = client.table("orders").select("*").eq("user_id", user_id)
+    if status_filter:
+        query = query.eq("status", status_filter)
+    query = query.order("created_at", desc=True)
+    res = query.execute()
+    orders = res.data or []
 
-    Args:
-        user_id (str): UUID of the user
-        status_filter (str, optional): Filter by status ('pending', 'approved', etc.)
+    # enrich each order
+    for order in orders:
+        oid = order.get("id")
+        items_res = (
+            client.table("order_items")
+            .select("*,menu_items(name,image_url)")
+            .eq("order_id", oid)
+            .execute()
+        )
+        order_items = items_res.data or []
+        order["items"] = order_items
 
-    Steps:
-    1. Get Supabase client
-    2. Query orders table:
-       - SELECT * FROM orders WHERE user_id = :user_id
-       - If status_filter provided: AND status = :status_filter
-       - ORDER BY created_at DESC
-    3. For each order, fetch order_items with menu_item details:
-       - SELECT oi.*, mi.name, mi.image_url
-         FROM order_items oi
-         JOIN menu_items mi ON oi.menu_item_id = mi.id
-         WHERE oi.order_id = :order_id
-    4. For each order, fetch stall name from food_stalls table
-    5. Assemble complete order objects with nested items and stall info
+        # fetch stall name
+        stall_res = (
+            client.table("food_stalls")
+            .select("name")
+            .eq("id", order.get("stall_id"))
+            .single()
+            .execute()
+        )
+        order["stall"] = stall_res.data
 
-    Returns:
-        list: List of order dicts with items and stall data
-    """
-    pass
+    return orders
 
 
 def get_order_detail(order_id, user_id):
-    """
-    Get detailed info for a single order (must belong to the user).
+    client = supabase_service.get_client()
+    order_res = (
+        client.table("orders")
+        .select("*")
+        .eq("id", order_id)
+        .eq("user_id", user_id)
+        .single()
+        .execute()
+    )
+    order = order_res.data
+    if not order:
+        return None
 
-    Args:
-        order_id (int): ID of the order
-        user_id (str): UUID of the authenticated user
+    items_res = (
+        client.table("order_items")
+        .select("*,menu_items(name,image_url)")
+        .eq("order_id", order_id)
+        .execute()
+    )
+    order["items"] = items_res.data or []
 
-    Steps:
-    1. Get Supabase client
-    2. Query orders table: WHERE id = :order_id AND user_id = :user_id
-    3. If not found, return None (route handler will return 404)
-    4. Fetch order_items with menu_item details
-    5. Fetch stall info
-    6. Return complete order dict
+    stall_res = (
+        client.table("food_stalls")
+        .select("*")
+        .eq("id", order.get("stall_id"))
+        .single()
+        .execute()
+    )
+    order["stall"] = stall_res.data
 
-    Returns:
-        dict or None: Order details or None if not found
-    """
-    pass
+    return order
