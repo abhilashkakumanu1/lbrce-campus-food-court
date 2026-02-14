@@ -41,11 +41,12 @@ A web-based food ordering system for college students at LBRCE. Students browse 
 
 ```bash
 cd api
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env   # Fill in your Supabase + Telegram credentials
-python app.py
+# Run with project root on PYTHONPATH so "api" package is found:
+PYTHONPATH=.. python3 app.py
 # API runs at http://localhost:5000
 ```
 
