@@ -1,87 +1,182 @@
 /**
- * Orders Page Logic (orders.html)
- * ================================
- * Displays the authenticated user's order history.
- * Supports filtering by status and auto-refresh.
+ * Orders Page Logic (orders.js)
+ * ==============================
+ * Displays user's order history and order tracking.
  */
 
 // ──────────────────────────────────────────────
-// On Page Load
+// Mock Orders Data
 // ──────────────────────────────────────────────
-// document.addEventListener('DOMContentLoaded', async () => {
-//     Steps:
-//     1. Call requireLogin() — redirect to login.html if not authenticated
-//     2. Call updateNavBar()
-//     3. Call loadOrders() to fetch and render orders
-//     4. Setup status filter tab click handlers
-//     5. Start auto-refresh interval (every 30 seconds)
-// });
+const mockOrders = [
+  {
+    id: 'ORD001',
+    stall: 'Pizza Corner',
+    items: [{ name: 'Veg Pizza', qty: 2, price: 150 }],
+    amount: 300,
+    status: 'Delivered',
+    createdAt: '2026-02-10 12:30',
+    deliveredAt: '2026-02-10 12:45',
+    rating: 5,
+    image: 'https://images.unsplash.com/photo-1604068549290-dea0e4a305ca?w=100&h=100&fit=crop'
+  },
+  {
+    id: 'ORD002',
+    stall: 'South Indian Corner',
+    items: [{ name: 'Masala Dosa', qty: 1, price: 120 }],
+    amount: 120,
+    status: 'Delivered',
+    createdAt: '2026-02-09 13:15',
+    deliveredAt: '2026-02-09 13:35',
+    rating: 4,
+    image: 'https://images.unsplash.com/photo-1585624798973-adf1ef931d1c?w=100&h=100&fit=crop'
+  },
+  {
+    id: 'ORD003',
+    stall: 'Meals & Curries',
+    items: [{ name: 'Chicken Biryani', qty: 1, price: 200 }],
+    amount: 200,
+    status: 'Ready',
+    createdAt: '2026-02-13 11:00',
+    estimatedTime: '15 mins',
+    image: 'https://images.unsplash.com/photo-1563805042-7684c019e1cb?w=100&h=100&fit=crop'
+  }
+];
 
 // ──────────────────────────────────────────────
 // Load Orders
 // ──────────────────────────────────────────────
-// async function loadOrders(statusFilter = null) {
-//     Steps:
-//     1. Show loading spinner
-//     2. Call ordersApi.list(statusFilter) — GET /api/orders?status=<filter>
-//     3. If error, show error message
-//     4. If empty, show "No orders yet" empty state
-//     5. For each order, render an order card
-//     6. Hide spinner
-// }
+async function loadOrders() {
+  const container = document.getElementById('ordersContainer');
+  
+  try {
+    const orders = await apiRequest(API_ENDPOINTS.userOrders);
+    if (!orders || orders.length === 0) {
+      container.innerHTML = `
+        <div class="text-center py-5">
+          <p class="text-muted">No orders yet</p>
+          <a href="index.html" class="btn btn-primary">Start Ordering</a>
+        </div>
+      `;
+      return;
+    }
+    container.innerHTML = orders.map(order => renderOrderCard(order)).join('');
+  } catch (error) {
+    console.error('Error loading orders:', error);
+    container.innerHTML = '<p class="text-danger">Failed to fetch orders. Please try again later.</p>';
+  }
+}
 
 // ──────────────────────────────────────────────
 // Render Order Card
 // ──────────────────────────────────────────────
-// function renderOrderCard(order) {
-//     Steps:
-//     1. Create a Bootstrap card or accordion item:
-//        - Order ID: "#123"
-//        - Stall name
-//        - Status badge (color-coded via Bootstrap classes):
-//          pending → badge bg-warning
-//          approved → badge bg-info
-//          ready → badge bg-success
-//          completed → badge bg-secondary
-//          rejected → badge bg-danger
-//        - Date/time: format order.created_at to readable string
-//        - Total: "₹105"
-//     2. Collapsible item list:
-//        - "2x Masala Dosa — ₹80"
-//        - "1x Vada (2 pcs) — ₹25"
-//     3. If status === 'rejected': show rejection_reason in red
-//     4. If status === 'approved' && estimated_time: show "Ready in ~15 minutes"
-//     5. Return card HTML
-// }
+function renderOrderCard(order) {
+  const statusBadge = {
+    'Delivered': 'success',
+    'Ready': 'warning',
+    'Pending': 'info',
+    'Cancelled': 'danger'
+  }[order.status] || 'secondary';
+
+  return `
+    <div class="col-md-6 mb-3">
+      <div class="card">
+        <div class="card-body">
+          <div class="d-flex gap-3 mb-3">
+            <img 
+              src="${order.image}" 
+              class="rounded" 
+              style="width: 80px; height: 80px; object-fit: cover;"
+              alt="${order.stall}"
+            >
+            <div class="flex-grow-1">
+              <h5 class="mb-1">${order.stall}</h5>
+              <small class="text-muted">${order.createdAt}</small>
+              <div>
+                <span class="badge bg-${statusBadge}">${order.status}</span>
+              </div>
+            </div>
+          </div>
+
+          <ul class="small mb-2">
+            ${order.items.map(item => `<li>${item.name} x${item.qty}</li>`).join('')}
+          </ul>
+
+          <div class="d-flex justify-content-between align-items-center">
+            <strong>₹${order.amount}</strong>
+            <button class="btn btn-sm btn-outline-primary" onclick="viewOrderDetail('${order.id}')">
+              View Details
+            </button>
+          </div>
+
+          ${order.status === 'Delivered' && !order.rating ? `
+            <div class="mt-2">
+              <small class="text-muted">Rate this order:</small>
+              <div class="mt-1">
+                ${[1,2,3,4,5].map(star => `
+                  <i class="bi bi-star" onclick="rateOrder('${order.id}', ${star})" 
+                     style="cursor: pointer; color: #ffc107;"></i>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
+
+          ${order.rating ? `
+            <div class="mt-2">
+              <small class="text-muted">Rated: ${order.rating} ⭐</small>
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+}
 
 // ──────────────────────────────────────────────
-// Status Filter Tabs
+// View Order Detail
 // ──────────────────────────────────────────────
-// function setupFilterTabs() {
-//     Steps:
-//     1. Get all filter tab elements (All, Pending, Approved, Ready, Completed, Rejected)
-//     2. Add click handler to each:
-//        - Set active class on clicked tab
-//        - Remove active from other tabs
-//        - Call loadOrders(status) — 'All' passes null
-// }
+function viewOrderDetail(orderId) {
+  window.location.href = `orders.html?id=${orderId}`;
+}
 
 // ──────────────────────────────────────────────
-// Auto-Refresh
+// Rate Order
 // ──────────────────────────────────────────────
-// let refreshInterval;
-// function startAutoRefresh() {
-//     refreshInterval = setInterval(() => {
-//         loadOrders(currentFilter);  // re-fetch with current filter
-//     }, 30000);  // every 30 seconds
-// }
+async function rateOrder(orderId, rating) {
+  try {
+    await apiRequest(API_ENDPOINTS.orderDetail(orderId), {
+      method: 'PUT',
+      body: { rating },
+    });
+    alert(`Thanks for rating! ⭐ ${rating}`);
+    loadOrders();
+  } catch (error) {
+    alert('Failed to save rating');
+  }
+}
 
 // ──────────────────────────────────────────────
-// Format Date
+// Update Navigation Bar
 // ──────────────────────────────────────────────
-// function formatDate(dateString) {
-//     Steps:
-//     1. Parse dateString into Date object
-//     2. Return formatted string: "15 Jan 2024, 10:30 AM"
-//     3. Or use relative time: "5 minutes ago"
-// }
+function updateNavBar() {
+  const user = typeof getCurrentUser === 'function' ? getCurrentUser() : (() => {
+    try { return JSON.parse(localStorage.getItem(typeof STORAGE_KEYS !== 'undefined' ? STORAGE_KEYS.user : 'user') || 'null'); } catch (e) { return null; }
+  })();
+  const authButtons = document.getElementById('authButtons');
+  const logoutBtn = document.getElementById('logoutBtn');
+  if (authButtons) authButtons.classList.toggle('d-none', !!user);
+  if (logoutBtn) logoutBtn.classList.toggle('d-none', !user);
+  if (!user) setTimeout(() => { window.location.href = 'login.html'; }, 1000);
+}
+
+// ──────────────────────────────────────────────
+// Initialize Page
+// ──────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  updateNavBar();
+  loadOrders();
+
+  const logoutBtn = document.getElementById('logoutBtn');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', logout);
+  }
+});

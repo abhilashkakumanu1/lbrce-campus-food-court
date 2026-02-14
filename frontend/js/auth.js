@@ -1,104 +1,89 @@
 /**
- * Auth Helpers
- * ============
- * Functions for login, register, logout, and auth state checks.
- * Uses the Supabase client from supabase.js.
+ * Authentication (auth.js)
+ * Uses config.js: API_ENDPOINTS, STORAGE_KEYS. Uses api.js: apiRequest. Load config and api before this script.
  */
+function isAuthenticated() {
+  const token = typeof STORAGE_KEYS !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.token) : null;
+  return !!token || !!localStorage.getItem('token');
+}
 
-// ──────────────────────────────────────────────
-// Login
-// ──────────────────────────────────────────────
-// async function loginUser(email, password) {
-//     Steps:
-//     1. Call supabaseClient.auth.signInWithPassword({ email, password })
-//     2. If error, throw or return the error
-//     3. If success, the session is auto-stored by Supabase JS client
-//     4. Return the session data
-// }
+function getCurrentUser() {
+  try {
+    const key = typeof STORAGE_KEYS !== 'undefined' ? STORAGE_KEYS.user : 'user';
+    const raw = localStorage.getItem(key) || localStorage.getItem('user') || 'null';
+    return JSON.parse(raw);
+  } catch (e) {
+    return null;
+  }
+}
 
-// ──────────────────────────────────────────────
-// Register
-// ──────────────────────────────────────────────
-// async function registerUser(email, password, name, phone) {
-//     Steps:
-//     1. Call supabaseClient.auth.signUp({ email, password })
-//     2. If error, throw or return the error
-//     3. Get the user ID from the signup response
-//     4. Call API to create profile: POST /api/auth/register with { email, name, phone }
-//        (or insert directly into users table via Supabase client)
-//     5. Return session data
-// }
+function setAuth(user, token) {
+  const sk = typeof STORAGE_KEYS !== 'undefined' ? STORAGE_KEYS : { user: 'user', token: 'token' };
+  if (user) localStorage.setItem(sk.user, JSON.stringify(user));
+  if (token) localStorage.setItem(sk.token, token);
+}
 
-// ──────────────────────────────────────────────
-// Logout
-// ──────────────────────────────────────────────
-// async function logoutUser() {
-//     Steps:
-//     1. Call supabaseClient.auth.signOut()
-//     2. Clear any local state
-//     3. Redirect to login.html
-// }
+function clearAuth() {
+  const sk = typeof STORAGE_KEYS !== 'undefined' ? STORAGE_KEYS : { user: 'user', token: 'token', cart: 'cart' };
+  localStorage.removeItem(sk.user);
+  localStorage.removeItem(sk.token);
+  localStorage.removeItem('user');
+  localStorage.removeItem('token');
+}
 
-// ──────────────────────────────────────────────
-// Get Current Session
-// ──────────────────────────────────────────────
-// async function getCurrentSession() {
-//     Steps:
-//     1. Call supabaseClient.auth.getSession()
-//     2. Return session object (or null if not logged in)
-// }
+async function login(email, password) {
+  const url = typeof API_ENDPOINTS !== 'undefined' ? API_ENDPOINTS.login : null;
+  if (!url) throw new Error('API_ENDPOINTS not loaded');
+  const response = await apiRequest(url, { method: 'POST', body: { email, password } });
+  const token = response.token || response.accessToken || response.data?.token;
+  const user = response.user || response.data?.user || response;
+  if (token) setAuth(user, token);
+  return response;
+}
 
-// ──────────────────────────────────────────────
-// Get Current User
-// ──────────────────────────────────────────────
-// async function getCurrentUser() {
-//     Steps:
-//     1. Call supabaseClient.auth.getUser()
-//     2. Return user object (or null)
-// }
+async function register() {
+  let name, email, password, phone;
+  if (arguments.length === 1 && typeof arguments[0] === 'object') {
+    ({ name, email, password, phone } = arguments[0]);
+  } else if (arguments.length === 3) {
+    name = arguments[0];
+    email = arguments[1];
+    password = arguments[2];
+    phone = '';
+  } else if (arguments.length >= 4) {
+    name = arguments[0];
+    email = arguments[1];
+    password = arguments[2];
+    phone = arguments[3] || '';
+  }
+  if (!email || !password || !name) throw new Error('Missing registration fields');
+  const url = typeof API_ENDPOINTS !== 'undefined' ? API_ENDPOINTS.register : null;
+  if (!url) throw new Error('API_ENDPOINTS not loaded');
+  const response = await apiRequest(url, { method: 'POST', body: { name, email, password, phone } });
+  const token = response.token || response.accessToken || response.data?.token;
+  const user = response.user || response.data?.user || response;
+  if (token) setAuth(user, token);
+  return response;
+}
 
-// ──────────────────────────────────────────────
-// Get Access Token
-// ──────────────────────────────────────────────
-// async function getAccessToken() {
-//     Steps:
-//     1. Get current session
-//     2. Return session.access_token (used in Authorization header for API calls)
-//     3. If no session, return null
-// }
+async function logout() {
+  try {
+    if (typeof API_ENDPOINTS !== 'undefined' && API_ENDPOINTS.logout) {
+      await apiRequest(API_ENDPOINTS.logout, { method: 'POST' });
+    }
+  } catch (e) { /* ignore */ }
+  finally {
+    clearAuth();
+    const sk = typeof STORAGE_KEYS !== 'undefined' ? STORAGE_KEYS : {};
+    if (sk.cart) localStorage.removeItem(sk.cart);
+    window.location.href = 'index.html';
+  }
+}
 
-// ──────────────────────────────────────────────
-// Auth Guard
-// ──────────────────────────────────────────────
-// async function requireLogin() {
-//     Steps:
-//     1. Check if user is logged in (getCurrentSession)
-//     2. If not logged in, redirect to login.html
-//     3. Return user data if logged in
-// }
-
-// ──────────────────────────────────────────────
-// Admin Guard
-// ──────────────────────────────────────────────
-// async function requireAdmin() {
-//     Steps:
-//     1. Call requireLogin() first
-//     2. Get user profile from API: GET /api/users/profile
-//     3. Check if role === 'admin'
-//     4. If not admin, redirect to index.html
-//     5. Return user profile data
-// }
-
-// ──────────────────────────────────────────────
-// Update Nav Bar
-// ──────────────────────────────────────────────
-// function updateNavBar(user) {
-//     Steps:
-//     1. If user is logged in:
-//        - Show: My Orders, Profile, Logout links
-//        - Hide: Login/Register link
-//        - If user.role === 'admin': show Admin link
-//     2. If user is NOT logged in:
-//        - Show: Login/Register link
-//        - Hide: My Orders, Profile, Logout, Admin links
-// }
+window.isAuthenticated = isAuthenticated;
+window.getCurrentUser = getCurrentUser;
+window.setAuth = setAuth;
+window.clearAuth = clearAuth;
+window.login = login;
+window.register = register;
+window.logout = logout;

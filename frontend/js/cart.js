@@ -1,150 +1,117 @@
 /**
- * Cart Logic (cart.js)
- * ====================
- * Manages the shopping cart using localStorage.
- * Used by both menu.html (adding items) and cart.html (viewing/placing order).
+ * Cart page – uses STORAGE_KEYS.cart and API_ENDPOINTS.orders / .cart for checkout. Requires config, api, auth, main.
  */
+var CART_KEY = (typeof STORAGE_KEYS !== 'undefined' && STORAGE_KEYS.cart) ? STORAGE_KEYS.cart : 'lbrce_cart';
 
-// ──────────────────────────────────────────────
-// Constants
-// ──────────────────────────────────────────────
-// const CART_KEY = 'lbrce_cart';
-// Cart format in localStorage:
-// {
-//   stall_id: 1,
-//   stall_name: "South Indian Corner",
-//   items: [
-//     { menu_item_id: 1, name: "Masala Dosa", price: 40, quantity: 2, image_url: "" },
-//     { menu_item_id: 3, name: "Vada (2 pcs)", price: 25, quantity: 1, image_url: "" }
-//   ]
-// }
+function getCart() {
+  var raw = localStorage.getItem(CART_KEY);
+  return raw ? JSON.parse(raw) : (Array.isArray(raw) ? [] : { stall_id: null, stall_name: '', items: [] });
+}
 
-// ──────────────────────────────────────────────
-// Get Cart
-// ──────────────────────────────────────────────
-// function getCart() {
-//     Steps:
-//     1. Read CART_KEY from localStorage
-//     2. If null, return { stall_id: null, stall_name: '', items: [] }
-//     3. Parse JSON and return
-// }
+function setCart(data) {
+  localStorage.setItem(CART_KEY, JSON.stringify(data));
+}
 
-// ──────────────────────────────────────────────
-// Save Cart
-// ──────────────────────────────────────────────
-// function saveCart(cart) {
-//     Steps:
-//     1. JSON.stringify(cart)
-//     2. localStorage.setItem(CART_KEY, jsonString)
-// }
+function renderCart() {
+  var list = document.getElementById('cart-list');
+  var cartItems = document.getElementById('cartItems');
+  var cart = getCart();
+  var items = Array.isArray(cart) ? cart : (cart.items || cart);
+  if (list) {
+    if (!items || items.length === 0) {
+      list.innerHTML = '<p>Your cart is empty.</p>';
+      return;
+    }
+    list.innerHTML = items.map(function(it, idx) {
+      var name = it.name || '';
+      var price = it.price != null ? it.price : it.cost || 0;
+      return '<div class="card mb-2"><div class="card-body d-flex justify-content-between align-items-center">' +
+        '<div><h6>' + name + '</h6><small class="text-muted">₹' + price + '</small></div>' +
+        '<button class="btn btn-sm btn-danger" onclick="removeFromCart(' + idx + ')">Remove</button></div></div>';
+    }).join('');
+  }
+  if (cartItems) {
+    var emptyState = document.getElementById('emptyState');
+    var stallName = document.getElementById('stallName');
+    var totalItems = document.getElementById('totalItems');
+    var totalAmount = document.getElementById('totalAmount');
+    if (!items || items.length === 0) {
+      if (emptyState) emptyState.classList.remove('d-none');
+      cartItems.innerHTML = '';
+      return;
+    }
+    if (emptyState) emptyState.classList.add('d-none');
+    if (stallName) stallName.textContent = cart.stall_name || 'Unknown Stall';
+    if (totalItems) totalItems.textContent = items.reduce(function(s, i) { return s + (i.quantity || 1); }, 0);
+    if (totalAmount) totalAmount.textContent = '₹' + items.reduce(function(s, i) { return s + (i.price || i.cost || 0) * (i.quantity || 1); }, 0);
+    cartItems.innerHTML = items.map(function(item) {
+      var q = item.quantity || 1;
+      var p = item.price != null ? item.price : item.cost || 0;
+      var mid = item.menu_item_id != null ? item.menu_item_id : item.id;
+      return '<div class="list-group-item p-3"><div class="row align-items-center">' +
+        '<div class="col"><h6 class="mb-1">' + (item.name || '') + '</h6><small class="text-muted">₹' + p + ' each</small></div>' +
+        '<div class="col-auto"><strong>₹' + (p * q) + '</strong></div>' +
+        '<div class="col-auto"><button class="btn btn-sm btn-danger" onclick="removeFromCartById(' + mid + ')">Remove</button></div></div></div>';
+    }).join('');
+  }
+}
 
-// ──────────────────────────────────────────────
-// Add to Cart
-// ──────────────────────────────────────────────
-// function addToCart(item, stallId, stallName) {
-//     Steps:
-//     1. Get current cart
-//     2. If cart has items from a DIFFERENT stall:
-//        - Show confirm dialog: "Your cart has items from another stall. Clear cart?"
-//        - If yes: clear cart and continue
-//        - If no: return (don't add)
-//     3. Set cart.stall_id and cart.stall_name
-//     4. Check if item already exists in cart (by menu_item_id)
-//        - If exists: increment quantity
-//        - If not: add new item { menu_item_id, name, price, quantity: 1, image_url }
-//     5. Save cart
-// }
+function removeFromCart(idx) {
+  var cart = getCart();
+  var items = Array.isArray(cart) ? cart : (cart.items || []);
+  items.splice(idx, 1);
+  if (Array.isArray(cart)) setCart(items); else { cart.items = items; setCart(cart); }
+  renderCart();
+  if (typeof updateCartBadge === 'function') updateCartBadge();
+}
 
-// ──────────────────────────────────────────────
-// Update Quantity
-// ──────────────────────────────────────────────
-// function updateQuantity(menuItemId, newQuantity) {
-//     Steps:
-//     1. Get cart
-//     2. Find item by menu_item_id
-//     3. If newQuantity <= 0: remove item from cart
-//     4. Else: update quantity
-//     5. If cart.items is now empty: clear cart entirely
-//     6. Save cart
-// }
+function removeFromCartById(menuItemId) {
+  var cart = getCart();
+  var items = Array.isArray(cart) ? cart : (cart.items || []);
+  var next = items.filter(function(i) { return (i.menu_item_id != null ? i.menu_item_id : i.id) !== menuItemId; });
+  if (Array.isArray(cart)) setCart(next); else { cart.items = next; setCart(cart); }
+  renderCart();
+  if (typeof updateCartBadge === 'function') updateCartBadge();
+}
 
-// ──────────────────────────────────────────────
-// Remove from Cart
-// ──────────────────────────────────────────────
-// function removeFromCart(menuItemId) {
-//     Steps:
-//     1. Get cart
-//     2. Filter out the item with matching menu_item_id
-//     3. If cart.items is now empty: clear cart
-//     4. Save cart
-// }
+async function checkout() {
+  if (typeof isAuthenticated === 'function' && !isAuthenticated()) {
+    alert('Please login to checkout.');
+    window.location.href = 'login.html';
+    return;
+  }
+  var cart = getCart();
+  var items = Array.isArray(cart) ? cart : (cart.items || cart);
+  if (!items || items.length === 0) { alert('Cart empty'); return; }
+  var ordersEndpoint = typeof API_ENDPOINTS !== 'undefined' && (API_ENDPOINTS.orders || API_ENDPOINTS.cart);
+  var body = Array.isArray(cart) ? { items: cart } : { stall_id: cart.stall_id, items: (cart.items || []).map(function(i) { return { menu_item_id: i.menu_item_id != null ? i.menu_item_id : i.id, quantity: i.quantity || 1 }; }) };
+  try {
+    if (ordersEndpoint) await apiRequest(ordersEndpoint, { method: 'POST', body: body });
+    setCart(Array.isArray(cart) ? [] : { stall_id: null, stall_name: '', items: [] });
+    renderCart();
+    if (typeof updateCartBadge === 'function') updateCartBadge();
+    alert('Order placed successfully');
+    window.location.href = 'orders.html';
+  } catch (e) {
+    console.error(e);
+    alert('Checkout failed');
+  }
+}
 
-// ──────────────────────────────────────────────
-// Clear Cart
-// ──────────────────────────────────────────────
-// function clearCart() {
-//     localStorage.removeItem(CART_KEY);
-// }
+function placeOrder() {
+  checkout();
+}
 
-// ──────────────────────────────────────────────
-// Get Cart Total
-// ──────────────────────────────────────────────
-// function getCartTotal() {
-//     Steps:
-//     1. Get cart
-//     2. Sum up (price * quantity) for each item
-//     3. Return total
-// }
+document.addEventListener('DOMContentLoaded', function() {
+  renderCart();
+  var checkoutBtn = document.getElementById('checkoutBtn');
+  var placeOrderBtn = document.getElementById('placeOrderBtn');
+  if (checkoutBtn) checkoutBtn.onclick = checkout;
+  if (placeOrderBtn) placeOrderBtn.onclick = placeOrder;
+});
 
-// ──────────────────────────────────────────────
-// Get Cart Item Count
-// ──────────────────────────────────────────────
-// function getCartItemCount() {
-//     Steps:
-//     1. Get cart
-//     2. Sum up quantities of all items
-//     3. Return count
-// }
-
-// ──────────────────────────────────────────────
-// Render Cart Page (cart.html only)
-// ──────────────────────────────────────────────
-// function renderCartPage() {
-//     Steps:
-//     1. Get cart
-//     2. If cart is empty:
-//        - Show "Your cart is empty" message
-//        - Show "Browse Stalls" link
-//        - Hide cart summary
-//        - Return
-//     3. Show stall name header
-//     4. For each item, render a cart row:
-//        - Item name, image thumbnail
-//        - Price per unit
-//        - Quantity controls: [-] [qty] [+]
-//        - Subtotal
-//        - Remove button
-//     5. Render cart summary:
-//        - Total items
-//        - Total amount
-//        - "Place Order" button
-//     6. Attach event handlers to quantity buttons and remove buttons
-// }
-
-// ──────────────────────────────────────────────
-// Place Order
-// ──────────────────────────────────────────────
-// async function placeOrder() {
-//     Steps:
-//     1. Check if user is logged in — if not, redirect to login.html
-//     2. Get cart
-//     3. Build API request body:
-//        { stall_id: cart.stall_id, items: cart.items.map(i => ({ menu_item_id: i.menu_item_id, quantity: i.quantity })) }
-//     4. Call ordersApi.create(stallId, items) — POST /api/orders
-//     5. If success:
-//        - Clear cart
-//        - Show success message/toast
-//        - Redirect to orders.html
-//     6. If error:
-//        - Show error message (e.g., "Item no longer available")
-// }
+window.removeFromCart = removeFromCart;
+window.removeFromCartById = removeFromCartById;
+window.renderCart = renderCart;
+window.getCart = getCart;
+window.placeOrder = placeOrder;

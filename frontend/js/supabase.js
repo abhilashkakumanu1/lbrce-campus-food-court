@@ -1,31 +1,24 @@
 /**
- * Supabase Client Initialization
- * ===============================
- * Creates and exports the Supabase client instance.
- * Uses the Supabase JS library loaded via CDN in the HTML files.
- *
- * The CDN script tag <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
- * makes `supabase` available as a global: window.supabase
+ * Supabase placeholder (supabase.js)
+ * Optional. If you use Supabase, set SUPABASE_CONFIG in config.js and load the Supabase script before this file.
  */
-
-// ──────────────────────────────────────────────
-// Initialize Supabase Client
-// ──────────────────────────────────────────────
-// Steps:
-// 1. Use the global supabase object from the CDN
-// 2. Call supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-// 3. Store the client in a variable for use across the app
-//
-// const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-//
-// Note: The CDN exposes `supabase` as a global. We create `supabaseClient`
-// to avoid naming conflicts.
-
-// ──────────────────────────────────────────────
-// Auth State Listener
-// ──────────────────────────────────────────────
-// Steps:
-// 1. Listen for auth state changes (login/logout)
-// 2. supabaseClient.auth.onAuthStateChange((event, session) => { ... })
-// 3. On SIGNED_IN: store session, update UI (show/hide nav links)
-// 4. On SIGNED_OUT: clear session, redirect to login if on protected page
+function initSupabase() {
+  if (typeof SUPABASE_CONFIG === 'undefined' || !window.supabase) return null;
+  try {
+    const client = window.supabase.createClient(SUPABASE_CONFIG.projectUrl, SUPABASE_CONFIG.anonKey);
+    if (client) {
+      client.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_IN' && session && session.user) {
+          localStorage.setItem(typeof STORAGE_KEYS !== 'undefined' ? STORAGE_KEYS.user : 'user', JSON.stringify(session.user));
+        } else if (event === 'SIGNED_OUT') {
+          localStorage.removeItem(typeof STORAGE_KEYS !== 'undefined' ? STORAGE_KEYS.user : 'user');
+          localStorage.removeItem(typeof STORAGE_KEYS !== 'undefined' ? STORAGE_KEYS.token : 'token');
+        }
+      });
+    }
+    return client;
+  } catch (err) {
+    return null;
+  }
+}
+if (typeof window !== 'undefined') window.initSupabase = initSupabase;

@@ -1,85 +1,59 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Menu — LBRCE Food Court</title>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Menu — Food Court</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div id="navbar"></div>
 
-    <!-- Bootstrap 5 CSS (CDN) -->
-    <link
-      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
-      rel="stylesheet"
-    />
-    <link
-      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="css/style.css" />
-  </head>
-  <body>
-    <!--
-    ============================================
-    Navigation Bar (same as index.html)
-    ============================================
-    -->
+  <div class="container py-4">
+    <h1 class="page-title">Menu</h1>
+    <p class="text-muted mb-4">South Indian, Breakfast & Chinese — click an item for price and add to cart.</p>
 
-    <!--
-    ============================================
-    Stall Header
-    ============================================
-    - Show stall name and description (fetched from URL param stall_id)
-    - Stall image (if available)
-    - Back button → index.html
-    -->
+    <!-- South Indian -->
+    <section class="category-section" id="south-indian">
+      <h2 class="category-heading">South Indian</h2>
+      <div class="menu-grid row g-3" id="menu-south-indian"></div>
+    </section>
 
-    <!--
-    ============================================
-    Category Filter Buttons
-    ============================================
-    - Horizontal button group: All | Main | Snack | Beverage | Dessert
-    - Clicking a category filters the items displayed below
-    - "All" shows everything (default)
-    - Use Bootstrap btn-group or nav-pills
-    -->
+    <!-- Breakfast -->
+    <section class="category-section" id="breakfast">
+      <h2 class="category-heading">Breakfast</h2>
+      <div class="menu-grid row g-3" id="menu-breakfast"></div>
+    </section>
 
-    <!--
-    ============================================
-    Menu Items Grid
-    ============================================
-    - Bootstrap card grid (row with col-md-4 or col-sm-6)
-    - Each menu item card shows:
-      - Dish image (from image_url, or a placeholder)
-      - Item name
-      - Description (truncated)
-      - Price: "₹40"
-      - Category badge (Bootstrap badge)
-      - "Add to Cart" button with quantity selector (+/-)
-    - Items fetched from API: GET /api/menu/stalls/<stall_id>/items
-    - Show loading spinner while fetching
-    - Show "No items found" if stall has no items
+    <!-- Chinese -->
+    <section class="category-section" id="chinese">
+      <h2 class="category-heading">Chinese</h2>
+      <div class="menu-grid row g-3" id="menu-chinese"></div>
+    </section>
+  </div>
 
-    URL: menu.html?stall_id=1
-    Read stall_id from URL query params in JS
-    -->
+  <footer class="footer">© 2026 Food Court</footer>
 
-    <!--
-    ============================================
-    Floating Cart Button
-    ============================================
-    - Fixed-position button at bottom-right
-    - Shows cart item count badge
-    - Clicking navigates to cart.html
-    - Only visible if cart has items
-    -->
-
-    <!-- Bootstrap 5 JS Bundle (CDN) -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="js/config.js"></script>
-    <script src="js/supabase.js"></script>
-    <script src="js/auth.js"></script>
-    <script src="js/api.js"></script>
-    <script src="js/cart.js"></script>
-    <script src="js/menu.js"></script>
-  </body>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="js/script.js"></script>
+  <script>
+    // Render menu cards for each category using shared MENU_DATA and renderMenuCard
+    document.addEventListener('DOMContentLoaded', function() {
+      const ids = {
+        'South Indian': 'menu-south-indian',
+        'Breakfast': 'menu-breakfast',
+        'Chinese': 'menu-chinese'
+      };
+      Object.keys(window.MENU_DATA || {}).forEach(function(cat) {
+        const container = document.getElementById(ids[cat]);
+        if (!container) return;
+        const items = window.MENU_DATA[cat];
+        container.innerHTML = items.map(function(item) {
+          return '<div class="col-12 col-sm-6 col-lg-4">' + window.renderMenuCard(item, cat) + '</div>';
+        }).join('');
+      });
+    });
+  </script>
+</body>
 </html>

@@ -1,111 +1,310 @@
-/*
- * Custom Styles — LBRCE Campus Food Court
- * ========================================
- * Bootstrap handles most styling via CDN.
- * This file contains only project-specific customizations.
- *
- * Guidelines:
- * - Use Bootstrap classes in HTML wherever possible
- * - Only add custom CSS here when Bootstrap doesn't cover it
- * - Mobile-first: base styles for mobile, then @media for larger screens
- */
+/* style.css */
+/* Bootstrap overrides and simple layout for the Food Court UI */
+:root{
+  --primary: #0d6efd;
+}
+body{
+  background:#f8f9fa;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+}
+.navbar-brand{font-weight:700;letter-spacing:.4px}
+.card{margin-bottom:1rem}
+.footer{background:#212529;color:#fff;padding:1rem 0;text-align:center;margin-top:2rem}
+.badge-cart{background:#dc3545}
+.container .lead{color:#5a5a5a}
+
+/* Responsive adjustments */
+@media (min-width: 992px){
+  .container{max-width:960px}
+}
+/* =====================================================
+   LBRCE Campus Food Court — Custom Styles
+   ===================================================== */
 
 /* ──────────────────────────────────────────────
-   CSS Variables (Theme Colors)
-   ──────────────────────────────────────────────
-   Define project colors here.
-   Use these in custom components for consistency.
-
-   :root {
-       --fc-primary: #2563eb;      (blue - main brand color)
-       --fc-success: #16a34a;      (green - approved/ready)
-       --fc-warning: #d97706;      (amber - pending)
-       --fc-danger: #dc2626;       (red - rejected)
-       --fc-bg: #f8f9fa;           (light gray background)
-   }
-*/
+   CSS Variables (Theme)
+   ────────────────────────────────────────────── */
+:root {
+    --fc-primary: #2563eb;
+    --fc-success: #16a34a;
+    --fc-warning: #d97706;
+    --fc-danger: #dc2626;
+    --fc-bg: #f8f9fa;
+    --fc-card-radius: 1rem;
+    --fc-shadow-sm: 0 4px 10px rgba(0,0,0,0.05);
+    --fc-shadow-md: 0 8px 20px rgba(0,0,0,0.08);
+}
 
 /* ──────────────────────────────────────────────
    Body & Layout
-   ──────────────────────────────────────────────
-   - Set background color
-   - Set default font (Bootstrap's default is fine)
-   - Min-height for sticky footer
-*/
+   ────────────────────────────────────────────── */
+body {
+    background: var(--fc-bg);
+    min-height: 100vh;
+}
+
+.main-container {
+    padding-bottom: 4rem;
+}
 
 /* ──────────────────────────────────────────────
-   Navbar Customizations
-   ──────────────────────────────────────────────
-   - Custom brand styling if needed
-   - Active link highlight
-*/
+   Navbar
+   ────────────────────────────────────────────── */
+.navbar-brand {
+    font-weight: 700;
+    letter-spacing: 0.3px;
+}
+
+.nav-link.active {
+    color: var(--fc-primary) !important;
+    font-weight: 600;
+}
 
 /* ──────────────────────────────────────────────
-   Food Stall Cards (index.html)
-   ──────────────────────────────────────────────
-   - Hover effect (subtle shadow or scale)
-   - Image aspect ratio (object-fit: cover)
-   - Fixed card height for uniform grid
-*/
+   Food Stall Cards
+   ────────────────────────────────────────────── */
+.stall-card {
+    border: none;
+    border-radius: var(--fc-card-radius);
+    overflow: hidden;
+    transition: transform .2s ease, box-shadow .2s ease;
+    box-shadow: var(--fc-shadow-sm);
+    height: 100%;
+}
+
+.stall-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--fc-shadow-md);
+}
+
+.stall-card img {
+    height: 180px;
+    width: 100%;
+    object-fit: cover;
+}
 
 /* ──────────────────────────────────────────────
-   Menu Item Cards (menu.html)
-   ──────────────────────────────────────────────
-   - Dish image styling (fixed height, object-fit: cover)
-   - Price highlight styling
-   - Add to cart button animation
-   - Category badge colors
-*/
+   Menu Item Cards
+   ────────────────────────────────────────────── */
+.menu-card {
+    border: none;
+    border-radius: var(--fc-card-radius);
+    overflow: hidden;
+    box-shadow: var(--fc-shadow-sm);
+    transition: transform .15s ease, box-shadow .15s ease;
+}
+
+.menu-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--fc-shadow-md);
+}
+
+.menu-card img {
+    height: 160px;
+    object-fit: cover;
+}
+
+.price-text {
+    font-weight: 700;
+    color: var(--fc-primary);
+    font-size: 1.1rem;
+}
+
+.btn-add-cart {
+    transition: transform .1s ease;
+}
+
+.btn-add-cart:active {
+    transform: scale(0.95);
+}
+
+/* Category badges */
+.badge-category {
+    font-size: 0.75rem;
+    border-radius: 0.5rem;
+    padding: 0.4em 0.6em;
+}
 
 /* ──────────────────────────────────────────────
-   Cart Page (cart.html)
-   ──────────────────────────────────────────────
-   - Quantity selector (+/- buttons) styling
-   - Cart summary card styling
-   - Floating cart button (fixed position bottom-right)
-*/
+   Cart Page
+   ────────────────────────────────────────────── */
+.qty-btn {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    line-height: 1;
+}
+
+.cart-summary {
+    border-radius: var(--fc-card-radius);
+    box-shadow: var(--fc-shadow-sm);
+}
+
+.floating-cart {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1050;
+    border-radius: 50%;
+    width: 60px;
+    height: 60px;
+    box-shadow: var(--fc-shadow-md);
+}
 
 /* ──────────────────────────────────────────────
    Order Status Badges
-   ──────────────────────────────────────────────
-   - Pending: warning yellow
-   - Approved: info blue
-   - Ready: success green
-   - Completed: secondary gray
-   - Rejected: danger red
-   (These map to Bootstrap badge classes, but add custom tweaks here)
-*/
+   ────────────────────────────────────────────── */
+.badge-pending {
+    background: var(--fc-warning);
+}
+
+.badge-approved {
+    background: var(--fc-primary);
+}
+
+.badge-ready {
+    background: var(--fc-success);
+}
+
+.badge-completed {
+    background: #6c757d;
+}
+
+.badge-rejected {
+    background: var(--fc-danger);
+}
 
 /* ──────────────────────────────────────────────
    Admin Dashboard
-   ──────────────────────────────────────────────
-   - Stats cards: icon + number layout
-   - Pending order cards: action button layout
-   - Orders table: responsive on mobile
-*/
+   ────────────────────────────────────────────── */
+.stat-card {
+    border-radius: var(--fc-card-radius);
+    box-shadow: var(--fc-shadow-sm);
+    border: none;
+}
+
+.stat-icon {
+    font-size: 1.8rem;
+    opacity: 0.8;
+}
+
+.pending-order-card {
+    border-radius: var(--fc-card-radius);
+    box-shadow: var(--fc-shadow-sm);
+}
+
+/* Responsive table */
+.table-responsive {
+    border-radius: var(--fc-card-radius);
+    overflow: hidden;
+}
 
 /* ──────────────────────────────────────────────
-   Image Upload (admin-menu.html)
-   ──────────────────────────────────────────────
-   - Image preview area styling
-   - Upload progress indicator
-   - Thumbnail in menu items table
-*/
+   Image Upload
+   ────────────────────────────────────────────── */
+.upload-preview {
+    border: 2px dashed #dee2e6;
+    border-radius: var(--fc-card-radius);
+    padding: 1rem;
+    text-align: center;
+}
 
-/* ──────────────────────────────────────────────
-   Responsive Adjustments
-   ──────────────────────────────────────────────
-   @media (max-width: 576px) {
-       - Stack cards vertically
-       - Full-width buttons
-       - Smaller font sizes if needed
-   }
-*/
+.upload-preview img {
+    max-height: 120px;
+    border-radius: 0.5rem;
+}
+
+.progress {
+    height: 6px;
+    border-radius: 3px;
+}
+
+.menu-thumb {
+    width: 50px;
+    height: 50px;
+    object-fit: cover;
+    border-radius: 0.4rem;
+}
 
 /* ──────────────────────────────────────────────
    Utility Classes
-   ──────────────────────────────────────────────
-   - .price-text { font-weight: bold; color: var(--fc-primary); }
-   - .loading-spinner { text-align: center; padding: 2rem; }
-   - .empty-state { text-align: center; padding: 3rem; color: #6c757d; }
-*/
+   ────────────────────────────────────────────── */
+.loading-spinner {
+    text-align: center;
+    padding: 2rem;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 3rem;
+    color: #6c757d;
+}
+
+/* ──────────────────────────────────────────────
+   Responsive Adjustments
+   ────────────────────────────────────────────── */
+@media (max-width: 576px) {
+
+    .stall-card img {
+        height: 150px;
+    }
+
+    .menu-card img {
+        height: 140px;
+    }
+
+    .floating-cart {
+        width: 55px;
+        height: 55px;
+        bottom: 15px;
+        right: 15px;
+    }
+
+    .btn {
+        width: 100%;
+    }
+}
+
+/* ──────────────────────────────────────────────
+   Image Hover Effects
+   ────────────────────────────────────────────── */
+.hover-lift {
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.hover-lift:hover {
+    transform: translateY(-8px);
+    box-shadow: var(--fc-shadow-md);
+}
+
+.card-img-top {
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
+    transition: transform 0.3s ease;
+}
+
+.card:hover .card-img-top {
+    transform: scale(1.05);
+}
+
+/* Image Loading & Error States */
+img[alt] {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: loading 1.5s infinite;
+}
+
+img[alt].loaded {
+    animation: none;
+    background: none;
+}
+
+@keyframes loading {
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
+    }
+}

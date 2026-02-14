@@ -1,85 +1,64 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Admin Dashboard — LBRCE Food Court</title>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin — Food Court</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div id="navbar"></div>
 
-    <!-- Bootstrap 5 CSS (CDN) -->
-    <link
-      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
-      rel="stylesheet"
-    />
-    <link
-      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="css/style.css" />
-  </head>
-  <body>
-    <!--
-    ============================================
-    Navigation Bar
-    ============================================
-    - Same nav as other pages, but "Admin" link is active
-    - Additional admin nav: "Dashboard" | "Menu Management"
-    -->
+  <div class="container py-4">
+    <h1 class="page-title">Admin Dashboard</h1>
+    <p class="text-muted mb-4">Manage orders and menu. All pages linked below.</p>
 
-    <!--
-    ============================================
-    Admin Dashboard
-    ============================================
-    - Requires login + admin role — redirect if not admin
-    - On page load: check user role, if not admin → redirect to index.html
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="admin-card">
+          <h3 class="text-accent mb-3">Orders</h3>
+          <p class="text-muted small">View and manage orders booked by customers.</p>
+          <a href="admin-orders.html" class="btn btn-primary btn-accent">Manage Orders</a>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="admin-card">
+          <h3 class="text-accent mb-3">Menu</h3>
+          <p class="text-muted small">Add or edit menu items (South Indian, Breakfast, Chinese).</p>
+          <a href="admin-menu.html" class="btn btn-primary btn-accent">Admin Menu</a>
+        </div>
+      </div>
+    </div>
 
-    STATS CARDS ROW:
-    - Bootstrap row with 4 col-md-3 cards:
-      1. Today's Orders (number, icon: bi-bag)
-      2. Pending Orders (number, icon: bi-clock, highlighted if > 0)
-      3. Today's Revenue (₹ amount, icon: bi-currency-rupee)
-      4. Popular Item (name + count, icon: bi-star)
-    - Data from: GET /api/admin/stats
+    <!-- Demo: orders booked by whom (static list for demo) -->
+    <div class="admin-card mt-4">
+      <h3 class="text-accent mb-3">Orders Booked (Demo)</h3>
+      <p class="text-muted small">Sample list — connect to backend for real data.</p>
+      <div class="table-responsive">
+        <table class="table table-dark table-hover">
+          <thead>
+            <tr><th>Order ID</th><th>Booked by</th><th>Items</th><th>Total</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>#1001</td><td>user@example.com</td><td>Dosa x2, Idly x1</td><td>₹140</td><td>Pending</td></tr>
+            <tr><td>#1002</td><td>guest@test.com</td><td>Noodles x1, Fried Rice x1</td><td>₹145</td><td>Completed</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 
-    PENDING ORDERS SECTION:
-    - Heading: "Pending Orders" with count badge
-    - Each pending order shown as a card:
-      - Student name and phone
-      - Stall name
-      - Order items list with quantities
-      - Total amount
-      - Time ago: "5 minutes ago"
-      - Action buttons:
-        - "Approve" (green) — opens modal to set estimated_time
-        - "Reject" (red) — opens modal to enter reason
-    - Auto-refresh every 15 seconds to catch new orders
+  <footer class="footer">© 2026 Food Court</footer>
 
-    APPROVE MODAL:
-    - Bootstrap modal
-    - Input: Estimated time in minutes (default: 15)
-    - Confirm button → POST /api/admin/orders/:id/approve
-    - On success: remove card from pending list, show toast
-
-    REJECT MODAL:
-    - Bootstrap modal
-    - Input: Rejection reason (textarea, required)
-    - Confirm button → POST /api/admin/orders/:id/reject
-    - On success: remove card from pending list, show toast
-
-    RECENT ORDERS TABLE:
-    - Below pending orders
-    - Table showing all today's orders (all statuses)
-    - Columns: Order ID, Student, Stall, Amount, Status (badge), Time, Actions
-    - Actions: "Mark Ready" (if approved), "Complete" (if ready)
-    - Data from: GET /api/admin/orders
-    -->
-
-    <!-- Bootstrap 5 JS Bundle (CDN) -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="js/config.js"></script>
-    <script src="js/supabase.js"></script>
-    <script src="js/auth.js"></script>
-    <script src="js/api.js"></script>
-    <script src="js/admin.js"></script>
-  </body>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="js/script.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      if (!window.isAdmin()) {
+        document.body.innerHTML = '<div class="container py-5"><p class="text-muted">Admin only. <a href="index.html">Go home</a>.</p></div>';
+      }
+    });
+  </script>
+</body>
 </html>

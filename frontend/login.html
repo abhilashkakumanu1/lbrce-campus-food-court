@@ -1,59 +1,123 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Login — LBRCE Food Court</title>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Login / Register — Food Court</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div id="navbar"></div>
 
-    <!-- Bootstrap 5 CSS (CDN) -->
-    <link
-      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
-      rel="stylesheet"
-    />
-    <link
-      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="css/style.css" />
-  </head>
-  <body>
-    <!--
-    ============================================
-    Login / Register Page
-    ============================================
-    - Centered card layout (Bootstrap container + row + col-md-6 mx-auto)
-    - Two tabs or toggle: "Login" and "Register"
-    - Use Bootstrap nav-tabs or a simple toggle button
+  <div class="container py-5">
+    <div class="row justify-content-center">
+      <div class="col-md-6 col-lg-5">
+        <div class="admin-card">
+          <h2 class="page-title mb-4">Login / Register</h2>
+          <ul class="nav nav-tabs mb-3" role="tablist">
+            <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#loginTab">Login</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#registerTab">Register</button></li>
+          </ul>
+          <div class="tab-content">
+            <div class="tab-pane fade show active" id="loginTab">
+              <form id="loginForm">
+                <div class="mb-3">
+                  <label class="form-label">Email</label>
+                  <input type="email" class="form-control" id="loginEmail" required placeholder="you@example.com">
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">Password</label>
+                  <input type="password" class="form-control" id="loginPassword" required>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">Login as</label>
+                  <select class="form-select" id="loginRole">
+                    <option value="user">User</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+                <button type="submit" class="btn btn-primary btn-accent w-100">Login</button>
+                <p class="small text-muted mt-3 mb-0">Admin demo: <code>admin@foodcourt.com</code> / <code>admin123</code></p>
+              </form>
+            </div>
+            <div class="tab-pane fade" id="registerTab">
+              <form id="registerForm">
+                <div class="mb-3">
+                  <label class="form-label">Name</label>
+                  <input type="text" class="form-control" id="regName" required placeholder="Your name">
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">Email</label>
+                  <input type="email" class="form-control" id="regEmail" required placeholder="you@example.com">
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">Password</label>
+                  <input type="password" class="form-control" id="regPassword" required minlength="6">
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">Register as</label>
+                  <select class="form-select" id="regRole">
+                    <option value="user">User</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+                <button type="submit" class="btn btn-primary btn-accent w-100">Register</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-    LOGIN FORM:
-    - Email input (type="email")
-    - Password input (type="password")
-    - Submit button: "Login"
-    - Error message area (hidden by default, shown on auth failure)
-    - On success: redirect to index.html
+  <footer class="footer">© 2026 Food Court</footer>
 
-    REGISTER FORM:
-    - Name input (type="text", required)
-    - Email input (type="email", required)
-    - Phone input (type="tel", optional)
-    - Password input (type="password", min 6 chars)
-    - Confirm password input
-    - Submit button: "Register"
-    - Error message area
-    - On success: redirect to index.html
-
-    AUTH FLOW:
-    - Login: calls Supabase Auth sign_in_with_password via supabase.js
-    - Register: calls Supabase Auth sign_up, then creates profile row via API
-    - Token stored in localStorage by Supabase JS client automatically
-    - On page load: check if user is already logged in → redirect to index.html
-    -->
-
-    <!-- Bootstrap 5 JS Bundle (CDN) -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="js/config.js"></script>
-    <script src="js/supabase.js"></script>
-    <script src="js/auth.js"></script>
-  </body>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="js/script.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      var user = window.getCurrentUser();
+      if (user) {
+        window.location.href = (user.role === 'admin') ? 'admin.html' : 'index.html';
+        return;
+      }
+      document.getElementById('loginForm').onsubmit = function(e) {
+        e.preventDefault();
+        var email = document.getElementById('loginEmail').value.trim();
+        var password = document.getElementById('loginPassword').value.trim();
+        var role = (document.getElementById('loginRole').value || '').trim().toLowerCase();
+        // Admin: either select "Admin" in dropdown OR use admin credentials
+        var isAdminCreds = (email.toLowerCase() === 'admin@foodcourt.com' && password === 'admin123');
+        if (isAdminCreds || role === 'admin') {
+          role = 'admin';
+        }
+        localStorage.setItem('foodcourt_token', 'demo-token');
+        localStorage.setItem('foodcourt_user', JSON.stringify({ email: email, name: email.split('@')[0], role: role }));
+        if (typeof window.renderNavbar === 'function') window.renderNavbar();
+        // User → index.html (user dashboard). Admin → admin.html (admin panel).
+        if (role === 'admin') {
+          window.location.replace('admin.html');
+        } else {
+          window.location.replace('index.html');
+        }
+      };
+      document.getElementById('registerForm').onsubmit = function(e) {
+        e.preventDefault();
+        var name = document.getElementById('regName').value.trim();
+        var email = document.getElementById('regEmail').value.trim();
+        var password = document.getElementById('regPassword').value;
+        var role = (document.getElementById('regRole').value || '').trim().toLowerCase();
+        localStorage.setItem('foodcourt_token', 'demo-token');
+        localStorage.setItem('foodcourt_user', JSON.stringify({ email: email, name: name, role: role }));
+        if (typeof window.renderNavbar === 'function') window.renderNavbar();
+        if (role === 'admin') {
+          window.location.replace('admin.html');
+        } else {
+          window.location.replace('index.html');
+        }
+      };
+    });
+  </script>
+</body>
 </html>
