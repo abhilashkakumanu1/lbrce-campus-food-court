@@ -1,76 +1,71 @@
-"""
-Auth Routes
-===========
-Blueprint: auth_bp
-Prefix: /api/auth
+from flask import Blueprint, request, jsonify
+from api.services.supabase_service import supabase_service
 
-Endpoints:
-    POST /auth/register  — Register a new user
-    POST /auth/login     — Login and get session token
-    POST /auth/logout    — Logout (invalidate session)
-
-All auth is handled by Supabase Auth. These routes act as a
-thin proxy so the frontend has a consistent API base URL.
-"""
-
-# from flask import Blueprint, request, jsonify
-# from services.supabase_service import get_supabase_client
-
-# auth_bp = Blueprint("auth", __name__)
+bp = Blueprint('auth', __name__, url_prefix='/auth')
 
 
+@bp.route('/register', methods=['POST'])
 def register():
-    """
-    POST /auth/register
+    body = request.get_json(silent=True) or {}
+    email = body.get('email')
+    password = body.get('password')
+    name = body.get('name')
+    phone = body.get('phone')
 
-    Request Body:
-        {
-            "email": "student@lbrce.edu.in",
-            "password": "mypassword",
-            "name": "Ramesh Kumar",
-            "phone": "9876543210"
-        }
+    if not email or not password:
+        return jsonify({'error': 'email and password are required'}), 400
 
-    Steps:
-    1. Parse JSON body — get email, password, name, phone
-    2. Call supabase.auth.sign_up({"email": email, "password": password})
-    3. If sign_up fails, return error with 400 status
-    4. Insert a row into the `users` table with id (from auth), name, email, phone
-    5. Return user and session data with 201 status
-    """
-    pass
+    client = supabase_service.get_client()
+    auth = client.auth
+    res = auth.sign_up({"email": email, "password": password})
+    if res.get('error'):
+        return jsonify({'error': res['error']['message']}), 400
+
+    user = res.get('user')
+    session = res.get('session')
+
+    # create profile row if user object present
+    if user:
+        try:
+            client.table('users').insert(
+                {
+                    'id': user.get('id'),
+                    'email': email,
+                    'name': name,
+                    'phone': phone,
+                }
+            ).execute()
+        except Exception:
+            # ignore failures here; profile can be created later
+            pass
+
+    return jsonify({'user': user, 'session': session}), 201
 
 
+@bp.route('/login', methods=['POST'])
 def login():
-    """
-    POST /auth/login
+    body = request.get_json(silent=True) or {}
+    email = body.get('email')
+    password = body.get('password')
 
-    Request Body:
-        {
-            "email": "student@lbrce.edu.in",
-            "password": "mypassword"
-        }
+    if not email or not password:
+        return jsonify({'error': 'email and password are required'}), 400
 
-    Steps:
-    1. Parse JSON body — get email, password
-    2. Call supabase.auth.sign_in_with_password({"email": email, "password": password})
-    3. If sign_in fails, return error with 401 status
-    4. Return user and session data (includes access_token) with 200 status
-    """
-    pass
+    client = supabase_service.get_client()
+    auth = client.auth
+    res = auth.sign_in_with_password({"email": email, "password": password})
+    if res.get('error'):
+        return jsonify({'error': res['error']['message']}), 401
+
+    return jsonify({'user': res.get('user'), 'session': res.get('session')}), 200
 
 
+@bp.route('/logout', methods=['POST'])
 def logout():
-    """
-    POST /auth/logout
-    Headers: Authorization: Bearer <token>
-
-    Steps:
-    1. Get the token from Authorization header
-    2. Call supabase.auth.sign_out() or just acknowledge logout
-    3. Return success message with 200 status
-
-    Note: Supabase JWTs are stateless — "logout" is mostly client-side
-    (clear token from localStorage). This endpoint exists for completeness.
-    """
-    pass
+    # token is typically sent in Authorization header but Supabase client uses stored
+    client = supabase_service.get_client()
+    try:
+        client.auth.sign_out()
+    except Exception:
+        pass
+    return jsonify({'message': 'logged out'})

@@ -1,19 +1,9 @@
-"""
-Admin Routes
-============
-Blueprint: admin_bp
-Prefix: /api/admin
+from flask import Blueprint, request, jsonify
+from api.middleware.auth_middleware import require_admin
+from api.services.supabase_service import supabase_service
+from api.services.telegram import send_order_notification_to_student
 
-Handles admin operations: order management, menu management, stats.
-All endpoints require authentication AND admin role.
-"""
-
-# from flask import Blueprint, request, jsonify
-# from middleware.auth_middleware import require_auth, require_admin
-# from services.supabase_service import get_supabase_client
-# from services.telegram import send_order_notification_to_student
-
-# admin_bp = Blueprint("admin", __name__)
+bp = Blueprint('admin', __name__, url_prefix='/admin')
 
 
 # ──────────────────────────────────────────────
@@ -21,144 +11,234 @@ All endpoints require authentication AND admin role.
 # ──────────────────────────────────────────────
 
 
+@bp.route('/orders/pending', methods=['GET'])
+@require_admin
 def get_pending_orders():
-    """
-    GET /api/admin/orders/pending
+    client = supabase_service.get_client()
+    res = (
+        client.table('orders')
+        .select('*')
+        .eq('status', 'pending')
+        .order('created_at', asc=True)
+        .execute()
+    )
+    orders = res.data or []
+    for order in orders:
+        uid = order.get('user_id')
+        usr = (
+            client.table('users')
+            .select('name,phone,telegram_id')
+            .eq('id', uid)
+            .single()
+            .execute()
+        )
+        order['user'] = usr.data
 
-    List all orders with status='pending'.
+        stall = (
+            client.table('food_stalls')
+            .select('name')
+            .eq('id', order.get('stall_id'))
+            .single()
+            .execute()
+        )
+        order['stall'] = stall.data
 
-    Headers: Authorization (admin only)
+        items = (
+            client.table('order_items')
+            .select('*,menu_items(name,price)')
+            .eq('order_id', order.get('id'))
+            .execute()
+        )
+        order['items'] = items.data or []
 
-    Steps:
-    1. Use @require_admin decorator to verify JWT and check role = 'admin'
-    2. Query orders table:
-       - SELECT o.*, u.name as user_name, u.phone as user_phone, fs.name as stall_name
-         FROM orders o
-         JOIN users u ON o.user_id = u.id
-         JOIN food_stalls fs ON o.stall_id = fs.id
-         WHERE o.status = 'pending'
-         ORDER BY o.created_at ASC
-    3. For each order, fetch order_items with menu_item details
-    4. Return list of pending orders with user and stall info
-
-    Response: [ { "id": 123, "user": {"name": "...", "phone": "..."}, "stall": {...}, "items": [...], ... } ]
-    """
-    pass
+    return jsonify(orders)
 
 
+@bp.route('/orders', methods=['GET'])
+@require_admin
 def get_all_orders():
-    """
-    GET /api/admin/orders
+    client = supabase_service.get_client()
+    status = request.args.get('status')
+    date = request.args.get('date')
 
-    List all orders with optional filters.
+    query = client.table('orders').select('*')
+    if status:
+        query = query.eq('status', status)
+    if date:
+        query = query.eq('created_at', date)  # simplistic; may need range
+    query = query.order('created_at', desc=True)
+    res = query.execute()
+    orders = res.data or []
 
-    Headers: Authorization (admin only)
-    Query Params:
-        - ?status=approved (optional)
-        - ?date=2024-01-15 (optional)
+    for order in orders:
+        uid = order.get('user_id')
+        usr = (
+            client.table('users')
+            .select('name,phone,telegram_id')
+            .eq('id', uid)
+            .single()
+            .execute()
+        )
+        order['user'] = usr.data
 
-    Steps:
-    1. Use @require_admin decorator
-    2. Get status and date query params
-    3. Build query with optional filters
-    4. Return filtered orders with user and stall info
+        stall = (
+            client.table('food_stalls')
+            .select('name')
+            .eq('id', order.get('stall_id'))
+            .single()
+            .execute()
+        )
+        order['stall'] = stall.data
 
-    Response: [ { ...orders... } ]
-    """
-    pass
+        items = (
+            client.table('order_items')
+            .select('*,menu_items(name,price)')
+            .eq('order_id', order.get('id'))
+            .execute()
+        )
+        order['items'] = items.data or []
+
+    return jsonify(orders)
 
 
+@bp.route('/orders/<int:order_id>/approve', methods=['POST'])
+@require_admin
 def approve_order(order_id):
-    """
-    POST /api/admin/orders/<order_id>/approve
+    client = supabase_service.get_client()
+    body = request.get_json(silent=True) or {}
+    est = body.get('estimated_time')
 
-    Approve a pending order.
+    order_res = (
+        client.table('orders')
+        .select('*')
+        .eq('id', order_id)
+        .single()
+        .execute()
+    )
+    order = order_res.data
+    if not order or order.get('status') != 'pending':
+        return jsonify({'error': 'Order is not in pending state'}), 400
 
-    Headers: Authorization (admin only)
-    URL Params: order_id (int)
-    Body: { "estimated_time": 15 } (optional, minutes)
+    update = {'status': 'approved'}
+    if est is not None:
+        update['estimated_time'] = est
+    client.table('orders').update(update).eq('id', order_id).execute()
 
-    Steps:
-    1. Use @require_admin decorator
-    2. Get order by ID — verify it exists and status is 'pending'
-    3. If not pending, return 400 "Order is not in pending state"
-    4. Update order: SET status = 'approved', estimated_time = :estimated_time, updated_at = NOW()
-    5. Get user's telegram_id from users table
-    6. If telegram_id exists, call send_order_notification_to_student():
-       "Your order #123 has been approved! It will be ready in 15 minutes."
-    7. Return updated order
+    # notify user
+    user_res = (
+        client.table('users')
+        .select('telegram_id')
+        .eq('id', order.get('user_id'))
+        .single()
+        .execute()
+    )
+    tid = user_res.data and user_res.data.get('telegram_id')
+    msg = f"Your order #{order_id} has been approved!"
+    if est is not None:
+        msg += f" It will be ready in {est} minutes."
+    send_order_notification_to_student(tid, msg)
 
-    Response: { "order": {...}, "message": "Order approved" }
-    """
-    pass
+    order['status'] = 'approved'
+    if est is not None:
+        order['estimated_time'] = est
+    return jsonify({'order': order, 'message': 'Order approved'})
 
 
+@bp.route('/orders/<int:order_id>/reject', methods=['POST'])
+@require_admin
 def reject_order(order_id):
-    """
-    POST /api/admin/orders/<order_id>/reject
+    client = supabase_service.get_client()
+    body = request.get_json(silent=True) or {}
+    reason = body.get('reason', '')
 
-    Reject a pending order with a reason.
+    order_res = (
+        client.table('orders')
+        .select('*')
+        .eq('id', order_id)
+        .single()
+        .execute()
+    )
+    order = order_res.data
+    if not order or order.get('status') != 'pending':
+        return jsonify({'error': 'Order is not in pending state'}), 400
 
-    Headers: Authorization (admin only)
-    URL Params: order_id (int)
-    Body: { "reason": "Item not available" }
+    update = {'status': 'rejected', 'rejection_reason': reason}
+    client.table('orders').update(update).eq('id', order_id).execute()
 
-    Steps:
-    1. Use @require_admin decorator
-    2. Get order by ID — verify it exists and status is 'pending'
-    3. Parse JSON body — get reason
-    4. Update order: SET status = 'rejected', rejection_reason = :reason, updated_at = NOW()
-    5. Get user's telegram_id
-    6. If telegram_id exists, send notification:
-       "Your order #123 was rejected. Reason: Item not available."
-    7. Return updated order
+    user_res = (
+        client.table('users')
+        .select('telegram_id')
+        .eq('id', order.get('user_id'))
+        .single()
+        .execute()
+    )
+    tid = user_res.data and user_res.data.get('telegram_id')
+    msg = f"Your order #{order_id} was rejected. Reason: {reason}."
+    send_order_notification_to_student(tid, msg)
 
-    Response: { "order": {...}, "message": "Order rejected" }
-    """
-    pass
+    order.update(update)
+    return jsonify({'order': order, 'message': 'Order rejected'})
 
 
+@bp.route('/orders/<int:order_id>/ready', methods=['POST'])
+@require_admin
 def mark_ready(order_id):
-    """
-    POST /api/admin/orders/<order_id>/ready
+    client = supabase_service.get_client()
+    order_res = (
+        client.table('orders')
+        .select('*')
+        .eq('id', order_id)
+        .single()
+        .execute()
+    )
+    order = order_res.data
+    if not order or order.get('status') != 'approved':
+        return jsonify({'error': 'Order is not in approved state'}), 400
 
-    Mark an approved order as ready for pickup.
+    client.table('orders').update({'status': 'ready'}).eq('id', order_id).execute()
 
-    Headers: Authorization (admin only)
-    URL Params: order_id (int)
+    # get user telegram and stall name
+    user_res = (
+        client.table('users')
+        .select('telegram_id')
+        .eq('id', order.get('user_id'))
+        .single()
+        .execute()
+    )
+    tid = user_res.data and user_res.data.get('telegram_id')
+    stall_res = (
+        client.table('food_stalls')
+        .select('name')
+        .eq('id', order.get('stall_id'))
+        .single()
+        .execute()
+    )
+    stall_name = stall_res.data and stall_res.data.get('name')
+    msg = f"Your order #{order_id} is ready for pickup at {stall_name}!"
+    send_order_notification_to_student(tid, msg)
 
-    Steps:
-    1. Use @require_admin decorator
-    2. Get order by ID — verify status is 'approved'
-    3. Update order: SET status = 'ready', updated_at = NOW()
-    4. Get user's telegram_id and stall name
-    5. If telegram_id exists, send notification:
-       "Your order #123 is ready for pickup at South Indian Corner!"
-    6. Return updated order
-
-    Response: { "order": {...}, "message": "Order marked as ready" }
-    """
-    pass
+    order['status'] = 'ready'
+    return jsonify({'order': order, 'message': 'Order marked as ready'})
 
 
+@bp.route('/orders/<int:order_id>/complete', methods=['POST'])
+@require_admin
 def complete_order(order_id):
-    """
-    POST /api/admin/orders/<order_id>/complete
+    client = supabase_service.get_client()
+    order_res = (
+        client.table('orders')
+        .select('*')
+        .eq('id', order_id)
+        .single()
+        .execute()
+    )
+    order = order_res.data
+    if not order or order.get('status') != 'ready':
+        return jsonify({'error': 'Order is not in ready state'}), 400
 
-    Mark an order as completed (picked up by student).
-
-    Headers: Authorization (admin only)
-    URL Params: order_id (int)
-
-    Steps:
-    1. Use @require_admin decorator
-    2. Get order by ID — verify status is 'ready'
-    3. Update order: SET status = 'completed', updated_at = NOW()
-    4. Return updated order
-
-    Response: { "order": {...}, "message": "Order completed" }
-    """
-    pass
+    client.table('orders').update({'status': 'completed'}).eq('id', order_id).execute()
+    order['status'] = 'completed'
+    return jsonify({'order': order, 'message': 'Order completed'})
 
 
 # ──────────────────────────────────────────────
@@ -166,87 +246,73 @@ def complete_order(order_id):
 # ──────────────────────────────────────────────
 
 
+@bp.route('/menu/items', methods=['POST'])
+@require_admin
 def add_menu_item():
-    """
-    POST /api/admin/menu/items
+    client = supabase_service.get_client()
+    body = request.get_json(silent=True) or {}
+    required = ['stall_id', 'name', 'price', 'category']
+    for field in required:
+        if field not in body:
+            return jsonify({'error': f'{field} is required'}), 400
+    if body['category'] not in ['main', 'snack', 'beverage', 'dessert']:
+        return jsonify({'error': 'Invalid category'}), 400
 
-    Add a new menu item.
+    # verify stall exists
+    stall = (
+        client.table('food_stalls')
+        .select('id')
+        .eq('id', body['stall_id'])
+        .single()
+        .execute()
+    )
+    if not stall.data:
+        return jsonify({'error': 'Stall not found'}), 400
 
-    Headers: Authorization (admin only)
-    Body:
-        {
-            "stall_id": 1,
-            "name": "Paneer Dosa",
-            "description": "Dosa with paneer filling",
-            "price": 60.00,
-            "category": "main",
-            "image_url": "https://xyz.supabase.co/storage/v1/object/public/menu-images/paneer-dosa.jpg"
-        }
-
-    Note: image_url comes from frontend after uploading to Supabase Storage.
-    The API does NOT handle file uploads — it just stores the URL string.
-
-    Steps:
-    1. Use @require_admin decorator
-    2. Parse JSON body
-    3. Validate required fields: stall_id, name, price, category
-    4. Validate stall_id exists
-    5. Validate category is one of: 'main', 'snack', 'beverage', 'dessert'
-    6. Insert into menu_items table
-    7. Return created item with 201
-
-    Response: { "item": {...} }
-    """
-    pass
+    insert_res = client.table('menu_items').insert(body).execute()
+    return jsonify({'item': insert_res.data[0]}), 201
 
 
+@bp.route('/menu/items/<int:item_id>', methods=['PUT'])
+@require_admin
 def update_menu_item(item_id):
-    """
-    PUT /api/admin/menu/items/<item_id>
+    client = supabase_service.get_client()
+    body = request.get_json(silent=True) or {}
+    # ensure item exists
+    existing = (
+        client.table('menu_items')
+        .select('*')
+        .eq('id', item_id)
+        .single()
+        .execute()
+    )
+    if not existing.data:
+        return jsonify({'error': 'Item not found'}), 404
 
-    Update an existing menu item.
+    update_data = {k: v for k, v in body.items() if k in ['name', 'price', 'is_available', 'image_url']}
+    if not update_data:
+        return jsonify({'error': 'No valid fields provided'}), 400
 
-    Headers: Authorization (admin only)
-    URL Params: item_id (int)
-    Body (all fields optional):
-        {
-            "name": "Updated Name",
-            "price": 70.00,
-            "is_available": false,
-            "image_url": "https://..."
-        }
-
-    Steps:
-    1. Use @require_admin decorator
-    2. Get item by ID — verify it exists
-    3. Parse JSON body
-    4. Build update dict with only provided fields
-    5. Update menu_items table: UPDATE ... WHERE id = :item_id
-    6. Return updated item
-
-    Response: { "item": {...} }
-    """
-    pass
+    res = client.table('menu_items').update(update_data).eq('id', item_id).execute()
+    return jsonify({'item': res.data[0]})
 
 
+@bp.route('/menu/items/<int:item_id>', methods=['DELETE'])
+@require_admin
 def delete_menu_item(item_id):
-    """
-    DELETE /api/admin/menu/items/<item_id>
+    client = supabase_service.get_client()
+    existing = (
+        client.table('menu_items')
+        .select('id')
+        .eq('id', item_id)
+        .single()
+        .execute()
+    )
+    if not existing.data:
+        return jsonify({'error': 'Item not found'}), 404
 
-    Delete a menu item.
-
-    Headers: Authorization (admin only)
-    URL Params: item_id (int)
-
-    Steps:
-    1. Use @require_admin decorator
-    2. Get item by ID — verify it exists
-    3. Delete from menu_items table: DELETE FROM menu_items WHERE id = :item_id
-    4. Return success message
-
-    Response: { "message": "Item deleted" }
-    """
-    pass
+    client.table('menu_items').delete().eq('id', item_id).execute()
+    return jsonify({'message': 'Item deleted'})
 
 
 # ──────────────────────────────────────────────
@@ -254,33 +320,66 @@ def delete_menu_item(item_id):
 # ──────────────────────────────────────────────
 
 
+@bp.route('/stats', methods=['GET'])
+@require_admin
 def get_stats():
-    """
-    GET /api/admin/stats
+    client = supabase_service.get_client()
+    from datetime import date
+    today = date.today().isoformat()
 
-    Get dashboard statistics.
+    # today's order count
+    today_res = (
+        client.table('orders')
+        .select('*', count='exact')
+        .gte('created_at', today)
+        .execute()
+    )
+    today_orders = today_res.count or 0
 
-    Headers: Authorization (admin only)
+    pending_res = (
+        client.table('orders')
+        .select('*', count='exact')
+        .eq('status', 'pending')
+        .execute()
+    )
+    pending_orders = pending_res.count or 0
 
-    Steps:
-    1. Use @require_admin decorator
-    2. Query today's order count:
-       SELECT COUNT(*) FROM orders WHERE DATE(created_at) = CURRENT_DATE
-    3. Query pending order count:
-       SELECT COUNT(*) FROM orders WHERE status = 'pending'
-    4. Query today's revenue:
-       SELECT COALESCE(SUM(total_amount), 0) FROM orders
-       WHERE DATE(created_at) = CURRENT_DATE AND status IN ('approved', 'ready', 'completed')
-    5. Query popular items (top 5):
-       SELECT mi.name, SUM(oi.quantity) as count
-       FROM order_items oi
-       JOIN menu_items mi ON oi.menu_item_id = mi.id
-       JOIN orders o ON oi.order_id = o.id
-       WHERE DATE(o.created_at) = CURRENT_DATE
-       GROUP BY mi.name
-       ORDER BY count DESC LIMIT 5
-    6. Return stats object
+    # compute revenue by pulling rows and summing
+    rev_res = (
+        client.table('orders')
+        .select('total_amount')
+        .gte('created_at', today)
+        .in_('status', ['approved', 'ready', 'completed'])
+        .execute()
+    )
+    today_revenue = sum(o.get('total_amount', 0) for o in (rev_res.data or []))
 
-    Response: { "today_orders": 45, "pending_orders": 3, "today_revenue": 2500, "popular_items": [...] }
-    """
-    pass
+    # popular items top 5
+    items_res = (
+        client.table('order_items')
+        .select('menu_item_id,quantity')
+        .execute()
+    )
+    counts = {}
+    for oi in (items_res.data or []):
+        mid = oi.get('menu_item_id')
+        counts[mid] = counts.get(mid, 0) + oi.get('quantity', 0)
+    # fetch names for top 5
+    popular = []
+    for mid, cnt in sorted(counts.items(), key=lambda kv: kv[1], reverse=True)[:5]:
+        mi_res = (
+            client.table('menu_items')
+            .select('name')
+            .eq('id', mid)
+            .single()
+            .execute()
+        )
+        popular.append({'name': mi_res.data.get('name') if mi_res.data else None, 'count': cnt})
+
+    stats = {
+        'today_orders': today_orders,
+        'pending_orders': pending_orders,
+        'today_revenue': today_revenue,
+        'popular_items': popular,
+    }
+    return jsonify(stats)

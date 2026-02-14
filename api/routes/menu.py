@@ -1,76 +1,77 @@
-"""
-Menu Routes
-===========
-Blueprint: menu_bp
-Prefix: /api/menu
+from flask import Blueprint, request, jsonify
+from api.services.supabase_service import supabase_service
 
-Endpoints:
-    GET /menu/stalls                  — List all active food stalls
-    GET /menu/stalls/<stall_id>/items — List menu items for a stall
-    GET /menu/items/<item_id>         — Get a single menu item
-    GET /menu/search                  — Search menu items by name
-
-These endpoints are PUBLIC — no auth required.
-"""
-
-# from flask import Blueprint, request, jsonify
-# from services.supabase_service import get_supabase_client
-
-# menu_bp = Blueprint("menu", __name__)
+bp = Blueprint('menu', __name__, url_prefix='/menu')
 
 
-def get_stalls():
-    """
-    GET /menu/stalls
-
-    Steps:
-    1. Query food_stalls table: SELECT * FROM food_stalls WHERE is_active = true
-    2. Return list of stalls with 200 status
-    """
-    pass
-
-
-def get_stall_items():
-    """
-    GET /menu/stalls/<stall_id>/items
-    Query params: ?category=main (optional)
-
-    Steps:
-    1. Get stall_id from URL path
-    2. Get optional category from query params
-    3. Query menu_items table:
-       SELECT * FROM menu_items WHERE stall_id = <stall_id> AND is_available = true
-    4. If category param provided, add: AND category = <category>
-    5. Return list of menu items with 200 status
-    """
-    pass
+@bp.route('/stalls', methods=['GET'])
+def list_stalls():
+    client = supabase_service.get_client()
+    res = (
+        client.table('food_stalls')
+        .select('*')
+        .eq('is_active', True)
+        .execute()
+    )
+    stalls = res.data or []
+    return jsonify({'stalls': stalls})
 
 
-def get_item():
-    """
-    GET /menu/items/<item_id>
+@bp.route('/stalls/<int:stall_id>/items', methods=['GET'])
+def list_items(stall_id):
+    category = request.args.get('category')
+    client = supabase_service.get_client()
+    query = (
+        client.table('menu_items')
+        .select('*')
+        .eq('stall_id', stall_id)
+        .eq('is_available', True)
+    )
+    if category:
+        query = query.eq('category', category)
+    res = query.execute()
+    items = res.data or []
+    return jsonify({'stall_id': stall_id, 'items': items})
 
-    Steps:
-    1. Get item_id from URL path
-    2. Query menu_items table: SELECT * FROM menu_items WHERE id = <item_id>
-    3. If not found, return 404
-    4. Return menu item with 200 status
-    """
-    pass
+
+@bp.route('/items/<int:item_id>', methods=['GET'])
+def get_item(item_id):
+    client = supabase_service.get_client()
+    res = (
+        client.table('menu_items')
+        .select('*')
+        .eq('id', item_id)
+        .single()
+        .execute()
+    )
+    item = res.data
+    if not item:
+        return jsonify({'error': 'Item not found'}), 404
+    return jsonify({'item': item})
 
 
-def search_items():
-    """
-    GET /menu/search?q=dosa
+@bp.route('/search', methods=['GET'])
+def search_menu():
+    q = request.args.get('q', '').strip()
+    if not q:
+        return jsonify({'error': 'query parameter q is required'}), 400
 
-    Steps:
-    1. Get search query 'q' from query params
-    2. If q is empty, return 400
-    3. Query menu_items table with ILIKE:
-       SELECT mi.*, fs.name as stall_name
-       FROM menu_items mi
-       JOIN food_stalls fs ON mi.stall_id = fs.id
-       WHERE mi.name ILIKE '%<q>%' AND mi.is_available = true
-    4. Return matching items with 200 status
-    """
-    pass
+    client = supabase_service.get_client()
+    # using ilike equivalent via .ilike (if supported) or filter
+    res = (
+        client.table('menu_items')
+        .select('*,food_stalls(name)')
+        .ilike('name', f'%{q}%')
+        .eq('is_available', True)
+        .execute()
+    )
+    items = res.data or []
+    # attach stall_name manually if not already
+    results = []
+    for mi in items:
+        entry = mi.copy()
+        fs = mi.get('food_stalls')
+        if fs and isinstance(fs, list) and fs:
+            entry['stall_name'] = fs[0].get('name')
+        results.append(entry)
+    return jsonify({'query': q, 'results': results})
